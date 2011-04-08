@@ -9,3 +9,13 @@ This is an experimental project mostly for educational purposes.
 Please let me know if you find any bugs.  
 
 Cheers
+
+Dependencies needed to compile:
+---------------------------------------------------------------------------------------
+LibXML2 (tested 2.7.3)  [http://xmlsoft.org/]
+ZeroMQ  (tested 2.1.4)  [http://www.zeromq.org/]
+LibCURL (tested 7.19.7) [http://curl.haxx.se/]
+Json-C  (tested 0.9)    [http://oss.metaparadigm.com/json-c/]
+
+So far only tested on OSX 10.6.7, but should work on most posix systems.
+
