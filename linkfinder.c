@@ -29,6 +29,8 @@ struct ResultBuffer {
   int links_found;
 };
 
+// approach adapted from:
+// http://stackoverflow.com/questions/800104/html-parsing-with-libxml/1482746#1482746 (thanks!)
 void FindLinks(htmlNodePtr element, struct ResultBuffer* buffer) {
 
   htmlNodePtr node;
