@@ -1,14 +1,10 @@
 // Linkfinder v0.0.1
 //
-// This is a zeromq server designed
-// to run a multi-threaded service
-// that fetches metadata about a given
-// link and returns it to a requestor.
-
-// right now it literally returns links in
-// the url's html, but will eventually
-// return interesting data about given urls
-// especially things like title, description, thumbnails, etc
+// This is a multi-threaded zeromq 
+// server/service designed to crawl
+// a url given by a client, and return
+// to that client a list of links on 
+// the said url.
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -72,9 +68,6 @@ void ParseHTML(struct ResultBuffer* buffer) {
 
   printf("--> About to Parse...\n");
 
-
-  // xmlChar *xstr = malloc(sizeof(html));
-  // xstr = xmlCharStrdup(html);
   htmlDocPtr doc = htmlReadDoc(buffer->memory, NULL, NULL, HTML_PARSE_RECOVER | HTML_PARSE_NOWARNING | HTML_PARSE_NOBLANKS);
 
   printf("--> Parsed...\n");
@@ -97,7 +90,6 @@ void ParseHTML(struct ResultBuffer* buffer) {
     xmlFreeDoc(doc);
     doc = NULL;
   }
-  //free(xstr);
 }
 
 
@@ -121,13 +113,6 @@ static size_t WriteResultBuffer(void *ptr, size_t size, size_t nmemb, void *data
 
 json_object * craftReply(struct ResultBuffer* buffer) {
 
-
-  /*  more examples:
-      json_object *jint = json_object_new_int(10);
-      json_object *jboolean = json_object_new_boolean(1);
-      json_object *jdouble = json_object_new_double(2.14);
-      json_object_object_add(jobj,"mykey", jarray);
-      */
   // setup json object
   json_object * jobj = json_object_new_object();
   // setup links array
@@ -187,7 +172,7 @@ static void * worker_routine (void *context) {
     } 
     code = curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     if(code != CURLE_OK) {
-      fprintf(stderr, "failed to set no signal\n");
+      fprintf(stderr, "Failed to set NOSIGNAL\n");
       goto bad_message;
     }
     code = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -280,7 +265,6 @@ bad_message:
   zmq_close (receiver);
   return NULL;
 }
-
 
 
 int main (void) {
