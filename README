@@ -1,0 +1,11 @@
+LinkFinder v0.0.1
+
+---------------------------------------------------------------------------------------
+
+A zeromq service that will crawl a url and return a list of linking urls in json format.
+
+This is an experimental project mostly for educational purposes.
+
+Please let me know if you find any bugs.  
+
+Cheers
