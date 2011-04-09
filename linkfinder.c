@@ -21,12 +21,22 @@
 // how many worker threads?
 #define NUM_WORKERS 4
 
-// struct to hold results from curl
+#ifdef DO_LFDEBUG
+#  define LFDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
+#else
+#  define LFDEBUG(fmt, args...) // no debugging 
+#endif
+
+
+
+// struct that is passed around to 
+// generate results
 struct ResultBuffer {
-  unsigned char *memory;
-  size_t size;
-  char **links;
-  int links_found;
+  unsigned char *page_buffer; // holds data from curl
+  size_t size;      // size of data from curl
+  char **links;     // array of links
+  int links_found;  // number of links found
+  char *title;      // title of page
 };
 
 // approach adapted from:
@@ -56,6 +66,10 @@ void FindLinks(htmlNodePtr element, struct ResultBuffer* buffer) {
               buffer->links_found++;
             }
           }
+      } else if(xmlStrcasecmp(node->name, (const xmlChar*)"TITLE") == 0) {
+
+        LFDEBUG("TITLE FOUND!");
+
       }
       if(node->children != NULL)
       {
@@ -68,25 +82,25 @@ void FindLinks(htmlNodePtr element, struct ResultBuffer* buffer) {
 
 void ParseHTML(struct ResultBuffer* buffer) {
 
-  printf("--> About to Parse...\n");
+  LFDEBUG("--> About to Parse...\n");
 
-  htmlDocPtr doc = htmlReadDoc(buffer->memory, NULL, NULL, HTML_PARSE_RECOVER | HTML_PARSE_NOWARNING | HTML_PARSE_NOBLANKS);
+  htmlDocPtr doc = htmlReadDoc(buffer->page_buffer, NULL, NULL, HTML_PARSE_RECOVER | HTML_PARSE_NOWARNING | HTML_PARSE_NOBLANKS);
 
-  printf("--> Parsed...\n");
+  LFDEBUG("--> Parsed...\n");
 
   if(doc != NULL) {
-    printf("--> At HTML ROOT...\n");
+    LFDEBUG("--> At HTML ROOT...\n");
     htmlNodePtr root = xmlDocGetRootElement(doc);
 
-    printf("--> FINDING LINKS...\n");
+    LFDEBUG("--> FINDING LINKS...\n");
     if(root != NULL) {
       FindLinks(root, buffer);
     }
-    printf("--> DONE FINDING LINKS!...\n");
-    printf("--> %d Links Found!...\n", buffer->links_found);
+    LFDEBUG("--> DONE FINDING LINKS!...\n");
+    LFDEBUG("--> %d Links Found!...\n", buffer->links_found);
     int x;
     for(x = 0; x < buffer->links_found; x++) {
-      printf("link: %s\n", buffer->links[x]);
+      LFDEBUG("link: %s\n", buffer->links[x]);
     }
 
     xmlFreeDoc(doc);
@@ -99,16 +113,16 @@ static size_t WriteResultBuffer(void *ptr, size_t size, size_t nmemb, void *data
   size_t realsize = size * nmemb;
   struct ResultBuffer *mem = (struct ResultBuffer *)data;
 
-  mem->memory = realloc(mem->memory, mem->size + realsize + 1);
-  if (mem->memory == NULL) {
+  mem->page_buffer = realloc(mem->page_buffer, mem->size + realsize + 1);
+  if (mem->page_buffer == NULL) {
     /* out of memory! */ 
-    printf("not enough memory (realloc returned NULL)\n");
+    LFDEBUG("not enough memory (realloc returned NULL)\n");
     exit(EXIT_FAILURE);
   }
 
-  memcpy(&(mem->memory[mem->size]), ptr, realsize);
+  memcpy(&(mem->page_buffer[mem->size]), ptr, realsize);
   mem->size += realsize;
-  mem->memory[mem->size] = 0;
+  mem->page_buffer[mem->size] = 0;
 
   return realsize;
 }
@@ -153,49 +167,49 @@ static void * worker_routine (void *context) {
 
     // setup buffer
     struct ResultBuffer buffer;
-    buffer.memory = malloc(1);  
+    buffer.page_buffer = malloc(1);  
     buffer.links = malloc(1);
     buffer.size = 0; 
     buffer.links_found = 0;
 
     // handle signals
     if(s_interrupted) {
-      printf("Interrupted\n");
+      LFDEBUG("Interrupted\n");
       break;
     } else {
-      printf ("\n\nReceived request for raw_url: [%s]\n", raw_url);
+      LFDEBUG ("\n\nReceived request for raw_url: [%s]\n", raw_url);
     }
 
     // Setup CURL
     curl = curl_easy_init();
     if (curl == NULL) {
-      fprintf(stderr, "Failed to create CURL connection\n");
+      LFDEBUG("Failed to create CURL connection\n");
       goto bad_message;
     } 
     code = curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1);
     if(code != CURLE_OK) {
-      fprintf(stderr, "Failed to set NOSIGNAL\n");
+      LFDEBUG("Failed to set NOSIGNAL\n");
       goto bad_message;
     }
     code = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     if (code != CURLE_OK) {
-      fprintf(stderr, "Failed to set redirect option\n");
+      LFDEBUG("Failed to set redirect option\n");
       goto bad_message;
     }
     curl_easy_setopt(curl,  CURLOPT_WRITEFUNCTION, WriteResultBuffer);
     if (code != CURLE_OK) {
-      fprintf(stderr, "Failed to set writer\n");
+      LFDEBUG("Failed to set writer\n");
       goto bad_message;
     }
     code = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buffer);
     if (code != CURLE_OK) {
-      fprintf(stderr, "Failed to set write data\n");
+      LFDEBUG("Failed to set write data\n");
       goto bad_message;
     }
     // oh yeah, this is totally firefox!
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows; U; Windows NT 6.1; ru; rv:1.9.2b5) Gecko/20091204 Firefox/3.6b5");
 
-    printf("--> Fetching\n");
+    LFDEBUG("--> Fetching\n");
 
     //for now just assume that this is a valid url and fetch
     //its contents to memory
@@ -206,15 +220,15 @@ static void * worker_routine (void *context) {
 
     // if we got a 500, 404, network error, etc, bail
     if (code != CURLE_OK)  {
-      fprintf(stderr, "Failed to get '%s'\n", raw_url);
-      fprintf(stderr, "code was: %d \n", code);
+      LFDEBUG("Failed to get '%s'\n", raw_url);
+      LFDEBUG("code was: %d \n", code);
       goto bad_message;
 
       // else parse it!
     } else {
-      printf("--> Parsing... \n");
+      LFDEBUG("--> Parsing... \n");
       ParseHTML(&buffer);
-      printf("---> DONE PARSING...\n");
+      LFDEBUG("---> DONE PARSING...\n");
     }
 
 
@@ -236,8 +250,8 @@ static void * worker_routine (void *context) {
       }
       free(buffer.links);
     }
-    if(buffer.memory) {
-      free(buffer.memory);
+    if(buffer.page_buffer) {
+      free(buffer.page_buffer);
     }
     curl_easy_cleanup(curl);
     json_object_put(jobj);
@@ -245,10 +259,10 @@ static void * worker_routine (void *context) {
     continue;
 
 bad_message:
-    printf("BAD MESSAGE!");
+    LFDEBUG("BAD MESSAGE!");
     // cleanup
-    if(buffer.memory) {
-      free(buffer.memory);
+    if(buffer.page_buffer) {
+      free(buffer.page_buffer);
     }
     if(raw_url) {
       free(raw_url);
@@ -262,7 +276,7 @@ bad_message:
   }
 
 
-  printf("DONE\n");
+  LFDEBUG("DONE\n");
   s_send(receiver, "DONE");
   zmq_close (receiver);
   return NULL;
@@ -293,7 +307,7 @@ int main (void) {
   }
 
   // Connect work threads to client threads via a queue
-  printf("starting device\n");
+  LFDEBUG("Linkfinder Started\n");
   zmq_device(ZMQ_QUEUE, clients, workers);
 
   // We never get here but clean up anyhow
